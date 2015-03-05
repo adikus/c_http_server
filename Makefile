@@ -1,7 +1,7 @@
 %.o : %.c
 	gcc -c -W -Wall $< -o $@
 
-server: http_server.o
-	gcc -pthread -W -Wall -Werror http_server.o -o http_server
+server: web-server.o
+	gcc -pthread -W -Wall -Werror web-server.o -o web-server
 
-http_server.o: http_server.c
+http_server.o: web-server.c
