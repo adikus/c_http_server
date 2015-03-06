@@ -12,7 +12,7 @@
 
 // Constants
 #define QUEUE_SIZE 100
-#define PORT 5000
+#define PORT 8080
 #define BUFLEN 10000
 #define N_THREADS 10
 #define DEVEL 1 // Development mode
@@ -232,7 +232,7 @@ int check_hostname(char *req_hostname){
         //We are in the lab
         sprintf(target_name, "%s:%d", hostname, PORT);
         char alt_target_name[100];
-        sprintf(alt_target_name, "%s.dcs.gla.ac.uk:%d",hostname,PORT);
+        sprintf(alt_target_name, "%s.dcs.gla.ac.uk:%d", hostname, PORT);
         return strcmp(req_hostname, target_name) == 0 ||
             strcmp(req_hostname, alt_target_name) == 0;
     }
@@ -253,11 +253,9 @@ void construct_headers(char* headers, char *code, char *mime,
     printf("%s %s %s %s\n", hr->host, code, hr->method, hr->path);
 }
 
-void send_headers_with_body(int fd, char *http_code, char *body, 
-    HR *hr) {
+void send_headers_with_body(int fd, char *http_code, char *body, HR *hr) {
     char response[500];
-    construct_headers(response, http_code, "text/html", strlen(body), 
-        hr);
+    construct_headers(response, http_code, "text/html", strlen(body), hr);
     strcat(response, body);
     write(fd, response, strlen(response));
 }
@@ -280,8 +278,7 @@ void send_file(int fd, FILE *fp){
 
 void send_response(int fd, HR *hr){
     if(check_hostname(hr->host) == 0){
-        send_headers_with_body(fd, "400 Bad Request", 
-            "Wrong hostname.\n", hr);
+        send_headers_with_body(fd, "400 Bad Request", "Wrong hostname.\n", hr);
         return;
     }
     if(strcmp(hr->method, "GET") != 0){
@@ -372,8 +369,7 @@ int start_server(int port) {
     // the server
     if(DEVEL){
         int yes = 1;
-        if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &yes, 
-            sizeof(int)) == -1){
+        if (setsockopt(server_fd,SOL_SOCKET,SO_REUSEADDR,&yes,sizeof(int))==-1){
             perror("setsockopt");
         }
     }
@@ -381,10 +377,7 @@ int start_server(int port) {
     addr.sin_addr.s_addr = INADDR_ANY;
     addr.sin_family = AF_INET;
     addr.sin_port = htons(port);
-    if (bind(
-        server_fd, 
-        (struct sockaddr*) &addr, sizeof(addr)
-        ) == -1) {
+    if (bind(server_fd, (struct sockaddr*) &addr, sizeof(addr)) == -1) {
         printf("Error: Unable to bind socket.\n");
         return -1;
     }
@@ -395,9 +388,7 @@ int start_server(int port) {
         return -1;
     }
 
-    printf(
-        "The server has been started and is listening at %i\n", 
-        port );
+    printf("The server has been started and is listening at %i\n", port);
     return server_fd;
 }
 
@@ -451,14 +442,11 @@ int main() {
         exit(1);
     }
 
-    if ((threads = (pthread_t *)malloc(
-        N_THREADS * sizeof(pthread_t))
-        ) == NULL){
+    if ((threads = (pthread_t *)malloc(N_THREADS * sizeof(pthread_t))) == NULL){
         fprintf(stderr, "Unable to malloc() array of pthread_t's\n");
         exit(1);
     }
-    if (regcomp(&header_regex, "(.*): (.*)\\s", 
-        REG_EXTENDED | REG_ICASE)) {
+    if (regcomp(&header_regex, "(.*): (.*)\\s", REG_EXTENDED | REG_ICASE)) {
         printf("Could not compile header regex.\n");
         exit(1);
     }
@@ -466,11 +454,7 @@ int main() {
     for (i = 0; i < N_THREADS; i++) {
         pthread_t t;
         if (pthread_create(&t, NULL, worker, (void *)queue) != 0) {
-            fprintf(
-                stderr, 
-                "Unable to create the %d-th thread\n", 
-                i+1
-            );
+            fprintf(stderr, "Unable to create the %d-th thread\n", i+1);
             exit(1);
         }
         threads[i] = t;
@@ -482,11 +466,7 @@ int main() {
         struct sockaddr_in cliaddr;
         socklen_t cliaddr_len = sizeof(cliaddr);
     
-        connfd = accept(
-            fd, 
-            (struct sockaddr*) &cliaddr, 
-            &cliaddr_len
-        );
+        connfd = accept(fd, (struct sockaddr*) &cliaddr, &cliaddr_len);
         if (connfd == -1) {
             printf("Error: Unable to accept connection.\n");
             continue;
