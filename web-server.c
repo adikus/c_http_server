@@ -13,7 +13,7 @@
 // Constants
 #define QUEUE_SIZE 100
 #define PORT 8080
-#define BUFLEN 10000
+#define BUFLEN 1500
 #define N_THREADS 10
 #define DEVEL 1 // Development mode
 
@@ -37,10 +37,9 @@ struct circ_queue {
 };
 typedef struct circ_queue CQ;
 
-/*
- * create a bounded buffer of integers
- * return NULL if unable to create
- */
+
+// create a bounded buffer of integers
+// return NULL if unable to create
 CQ *cq_create() {
     int *buf;
     CQ *p = NULL;
@@ -60,10 +59,9 @@ CQ *cq_create() {
     return p;
 }
 
-/*
- * put an integer into the bounded buffer; block until there is space
- * returns 1 if put was successful, returns 0 if not
- */
+
+// put an integer into the bounded buffer; block until there is space
+// returns 1 if put was successful, returns 0 if not
 int cq_put(CQ *cq, int item) {
     int result;
 
@@ -80,11 +78,9 @@ int cq_put(CQ *cq, int item) {
     return result;
 }
 
-/*
- * get an integer from the bounded buffer; block until there is an
- * item returns 1 if get was successful, in which case retrieved 
- * item is in *data, return 0 if not
- */
+// get an integer from the bounded buffer; block until there is an
+// item returns 1 if get was successful, in which case retrieved 
+// item is in *data, return 0 if not
 int cq_get(CQ *cq, int *data) {
     int result;
 
@@ -113,6 +109,7 @@ struct http_request {
 };
 typedef struct http_request HR;
 
+// create http request, which holds parsed request info
 HR *hr_create() {
     HR *p = NULL;
     if ((p = (HR *)malloc(sizeof(HR))) != NULL) {
@@ -125,30 +122,30 @@ HR *hr_create() {
     return NULL;
 }
 
+
 int hr_set_method(HR *hr, char *method) {
     hr->method = (char *)malloc(sizeof(char) * (strlen(method) + 1));
-    if(hr->method == NULL)
-        return 0;
+    if(hr->method == NULL)return 0;
     strcpy(hr->method, method);
     return 1;
 }
 
 int hr_set_path(HR *hr, char *path) {
     hr->path = (char *)malloc(sizeof(char) * (strlen(path) + 1));
-    if(hr->path == NULL)
-        return 0;
+    if(hr->path == NULL)return 0;
     strcpy(hr->path, path);
     return 1;
 }
 
 int hr_set_host(HR *hr, char *host) {
     hr->host = (char *)malloc(sizeof(char) * (strlen(host) + 1));
-    if(hr->host == NULL)
-        return 0;
+    if(hr->host == NULL)return 0;
     strcpy(hr->host, host);
     return 1;
 }
 
+// parse the "GET path HTTP..." line
+// split by spaces and retrieve first and second parts
 void parse_first_header_line(char *line, HR *hr) {
     char *token;
     char *saved;
@@ -165,7 +162,9 @@ void parse_first_header_line(char *line, HR *hr) {
     }
 }
 
-void parse_headers_line(char *line, HR *hr){
+// parse normal header line which is in form "Key: Value"
+// for now we are only interested in value of "Host"
+int parse_headers_line(char *line, HR *hr){
     regmatch_t pmatches[3];
     char *matches[3];
     
@@ -174,13 +173,16 @@ void parse_headers_line(char *line, HR *hr){
         for(i=0;i<3;i++){
             int len = pmatches[i].rm_eo - pmatches[i].rm_so;
             matches[i] = malloc(sizeof(char) * (len+1));
-            memcpy(matches[i], line + pmatches[i].rm_so, len);
-            matches[i][len] = 0;
+            if(matches[i] != NULL){
+                memcpy(matches[i], line + pmatches[i].rm_so, len);
+                matches[i][len] = 0; //Set end string '0'
+            }else return 0;
         }
         if(strcmp(matches[1], "Host") == 0){
             hr_set_host(hr, matches[2]);        
         }
     }
+    return 1;
 }
 
 /********************************************************************
@@ -230,11 +232,13 @@ int check_hostname(char *req_hostname){
         return strcmp(req_hostname, target_name) == 0;
     }else{
         //We are in the lab
-        sprintf(target_name, "%s:%d", hostname, PORT);
-        char alt_target_name[100];
-        sprintf(alt_target_name, "%s.dcs.gla.ac.uk:%d", hostname, PORT);
-        return strcmp(req_hostname, target_name) == 0 ||
-            strcmp(req_hostname, alt_target_name) == 0;
+        if(strlen(hostname) < 80){
+            sprintf(target_name, "%s:%d", hostname, PORT);
+            char alt_target_name[100];
+            sprintf(alt_target_name, "%s.dcs.gla.ac.uk:%d", hostname, PORT);
+            return strcmp(req_hostname, target_name) == 0 ||
+                strcmp(req_hostname, alt_target_name) == 0;    
+        }else return -1; // Cannot compare hostnames       
     }
 }
 
@@ -251,6 +255,15 @@ void construct_headers(char* headers, char *code, char *mime,
     sprintf(headers, "HTTP/1.1 %s\r\nContent-Type: %s\r\n"
             "Content-Length: %u\r\n\r\n", code, mime, length);
     printf("%s %s %s %s\n", hr->host, code, hr->method, hr->path);
+}
+
+void send_internal_server_error(int fd, HR *hr) {
+    char response[500];
+    char body[] = "Internal Server Error";
+    construct_headers(response, "500 Internal Server Error", "text/html", 
+        strlen(body), hr);
+    strcat(response, body);
+    write(fd, response, strlen(response));
 }
 
 void send_headers_with_body(int fd, char *http_code, char *body, HR *hr) {
@@ -277,8 +290,12 @@ void send_file(int fd, FILE *fp){
 }
 
 void send_response(int fd, HR *hr){
-    if(check_hostname(hr->host) == 0){
+    int hostname_check = check_hostname(hr->host);
+    if(hostname_check == 0){
         send_headers_with_body(fd, "400 Bad Request", "Wrong hostname.\n", hr);
+        return;
+    }else if(hostname_check == -1){
+        send_internal_server_error(fd, hr);
         return;
     }
     if(strcmp(hr->method, "GET") != 0){
@@ -286,11 +303,14 @@ void send_response(int fd, HR *hr){
             "Wrong method.\n", hr);
         return;
     }
-
     char filename[100];
     FILE *fp;
     struct stat statbuf;
 
+    if(strlen(hr->path) > 99){
+        send_internal_server_error(fd, hr);
+        return;
+    }
     get_file_name_from_path(hr->path, filename);
     stat(filename, &statbuf);
     
@@ -334,62 +354,63 @@ void process_request(int fd, char *buf, HR *hr) {
             if(token_len == 1){
                 hr->done = 1;
                 send_response(fd, hr);
-                free((void *)hr);
-                hr = hr_create();
             }else{
                 memset(line, '\0', 500);
                 strcpy(line, token);
-                if(line_n == 0){
-                    parse_first_header_line(line, hr);
-                }else{
-                    parse_headers_line(line, hr);
+                if(line_n == 0) parse_first_header_line(line, hr);
+                else{
+                    if(parse_headers_line(line, hr) == 0){
+                        hr->done = 1;
+                        send_internal_server_error(fd, hr);
+                    }
                 }
             }
-        }else{
-            printf("Skipping long header line.");
-        }
+            if(hr->done == 1){
+                free((void *)hr);
+                if((hr = hr_create()) == NULL){
+                    printf("Unable to allocate memory for request");
+                    exit(1);
+                }
+            }
+        }else printf("Skipping long header line.");
         line_n++;
         token = strtok_r(NULL, "\n", &saved);
     }
 }
 
 int start_server(int port) {
-    int server_fd;
-
-    server_fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (server_fd == -1) {
+    int fd;
+    fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd == -1) {
         printf("Error: Unable to create socket.\n");
         return -1;
     }
 
-    struct sockaddr_in addr;
-
     // If we are in development mode, make the socket reusable
-    // This allows to bind the socket right away after restarting 
-    // the server
+    // This allows to bind the socket right away after restarting the server
     if(DEVEL){
         int yes = 1;
-        if (setsockopt(server_fd,SOL_SOCKET,SO_REUSEADDR,&yes,sizeof(int))==-1){
+        if (setsockopt(fd,SOL_SOCKET,SO_REUSEADDR,&yes,sizeof(int))==-1)
             perror("setsockopt");
-        }
     }
 
+    struct sockaddr_in addr;
     addr.sin_addr.s_addr = INADDR_ANY;
     addr.sin_family = AF_INET;
     addr.sin_port = htons(port);
-    if (bind(server_fd, (struct sockaddr*) &addr, sizeof(addr)) == -1) {
+    if (bind(fd, (struct sockaddr*) &addr, sizeof(addr)) == -1) {
         printf("Error: Unable to bind socket.\n");
         return -1;
     }
 
     int backlog = 10;
-    if (listen(server_fd, backlog) == -1) {
+    if (listen(fd, backlog) == -1) {
         printf("Error: Unable to start listening.\n");
         return -1;
     }
 
     printf("The server has been started and is listening at %i\n", port);
-    return server_fd;
+    return fd;
 }
 
 void *worker(void *args) {
