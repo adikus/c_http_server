@@ -12,9 +12,9 @@
 
 // Constants
 #define QUEUE_SIZE 100
-#define PORT 8080
+#define PORT 5000
 #define BUFLEN 1500
-#define N_THREADS 10
+#define N_THREADS 15
 #define DEVEL 1 // Development mode
 
 // Global variables
@@ -200,7 +200,6 @@ void get_mime_type(char *file_name, char *type){
             strcpy(extension, token);
         token = strtok_r(NULL, ".", &saved);
     }
-
     if(strcmp(extension, "css") == 0){
         strcpy(type, "text/css");
     }else if(strcmp(extension, "js") == 0){
@@ -291,6 +290,10 @@ void send_file(int fd, FILE *fp){
 
 void send_response(int fd, HR *hr){
     int hostname_check = check_hostname(hr->host);
+    if(hr->method == NULL){
+        send_headers_with_body(fd, "400 Bad Request", "Could not parse.\n", hr);
+        return;
+    }    
     if(hostname_check == 0){
         send_headers_with_body(fd, "400 Bad Request", "Wrong hostname.\n", hr);
         return;
@@ -313,7 +316,6 @@ void send_response(int fd, HR *hr){
     }
     get_file_name_from_path(hr->path, filename);
     stat(filename, &statbuf);
-    
     if(S_ISDIR(statbuf.st_mode)){
         strcat(filename, "/index.html");
         stat(filename, &statbuf);
@@ -332,7 +334,6 @@ void send_response(int fd, HR *hr){
         send_headers_with_body(fd,"404 Not Found","Not found.\n", hr);
         return;
     }
-
     send_file(fd, fp);
     fclose(fp);
 }
@@ -372,7 +373,7 @@ void process_request(int fd, char *buf, HR *hr) {
                     exit(1);
                 }
             }
-        }else printf("Skipping long header line.");
+        }else printf("Skipping long header line.\n");
         line_n++;
         token = strtok_r(NULL, "\n", &saved);
     }
@@ -385,7 +386,6 @@ int start_server(int port) {
         printf("Error: Unable to create socket.\n");
         return -1;
     }
-
     // If we are in development mode, make the socket reusable
     // This allows to bind the socket right away after restarting the server
     if(DEVEL){
